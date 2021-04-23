@@ -43,7 +43,7 @@ jobs:
       - image: cimg/node:14.16.1
     steps:
       - checkout
-      - berry-install-packages
+      - install-packages
       - restore_cache:
           keys:
             - eslintcache-{{ .Branch }}-{{ checksum ".eslintrc" }}-{{ checksum "yarn.lock" }}
