@@ -1,0 +1,16 @@
+version: '3.7'
+
+services:
+  mysql:
+    image: mysql:8.0@sha256:5d1d733f32c28d47061e9d5c2b1fb49b4628c4432901632a70019ec950eda491
+    ports:
+      - published: ${MYSQL_PORT}
+        target: 3306
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+volumes:
+  mysql-data:
