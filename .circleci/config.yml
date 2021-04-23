@@ -1,0 +1,187 @@
+version: 2.1
+
+orbs:
+  docker: circleci/docker@1.5.0
+  codecov: codecov/codecov@1.1.3
+
+commands:
+  install-packages:
+    steps:
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "schema.prisma" }}-{{ checksum "package.json" }}-{{ checksum "yarn.lock" }}
+            - v1-dependencies-{{ checksum "schema.prisma" }}-{{ checksum "package.json" }}-
+            - v1-dependencies-{{ checksum "schema.prisma" }}-
+      - run: yarn install --frozen-lockfile
+      - save_cache:
+          paths:
+            - node_modules
+          key: |
+            v1-dependencies-{{ checksum "schema.prisma" }}-{{ checksum "package.json" }}-{{ checksum "yarn.lock" }}
+
+jobs:
+  build:
+    docker:
+      - image: circleci/node:14.15.3
+    steps:
+      - checkout
+      - install-packages
+      - run: yarn run build
+      - store_artifacts:
+          path: ./dist
+
+  lint-prettier:
+    docker:
+      - image: circleci/node:14.15.3
+    steps:
+      - checkout
+      - install-packages
+      - run: yarn run lint:prettier
+
+  lint-eslint:
+    docker:
+      - image: cimg/node:14.16.1
+    steps:
+      - checkout
+      - install-packages
+      - restore_cache:
+          keys:
+            - eslintcache-{{ .Branch }}-{{ checksum ".eslintrc" }}-{{ checksum "yarn.lock" }}
+            - eslintcache-{{ .Branch }}-{{ checksum ".eslintrc" }}
+            - eslintcache-{{ .Branch }}
+            - eslintcache
+      - run: yarn run lint:eslint --format junit --output-file ./junit/eslint.xml
+      - save_cache:
+          key: eslintcache-{{ .Branch }}-{{ checksum ".eslintrc" }}-{{ checksum "yarn.lock" }}
+          paths:
+            - .eslintcache
+      - store_test_results:
+          path: ./junit
+
+  ts-check:
+    docker:
+      - image: circleci/node:14.15.3
+    steps:
+      - checkout
+      - install-packages
+      - run: yarn run ts-check
+
+  test-small:
+    docker:
+      - image: circleci/node:14.15.3
+    steps:
+      - checkout
+      - install-packages
+      - run:
+          command: |
+            yarn run test:small --ci --runInBand \
+              --forceExit \
+              --reporters=default --reporters=jest-junit \
+              --testResultsProcessor=jest-junit
+          environment:
+            JEST_JUNIT_OUTPUT_DIR: ./junit
+            JEST_JUNIT_OUTPUT_NAME: jest.xml
+      - store_test_results:
+          path: ./junit
+      - store_artifacts:
+          path: ./coverage
+      - codecov/upload:
+          flags: small
+          file: ./coverage/lcov.info
+
+  test-medium:
+    docker:
+      - image: circleci/node:14.15.3
+    steps:
+      - checkout
+      - install-packages
+      - run:
+          command: |
+            yarn run test:medium --ci --runInBand \
+              --forceExit \
+              --reporters=default --reporters=jest-junit \
+              --testResultsProcessor=jest-junit
+          environment:
+            JEST_JUNIT_OUTPUT_DIR: ./junit
+            JEST_JUNIT_OUTPUT_NAME: jest.xml
+      - store_test_results:
+          path: ./junit
+      - store_artifacts:
+          path: ./coverage
+      - codecov/upload:
+          flags: medium
+          file: ./coverage/lcov.info
+
+  test-large:
+    docker:
+      - image: circleci/node:14.15.3
+    steps:
+      - checkout
+      - install-packages
+      - run:
+          command: |
+            yarn run test:large --ci --forceExit \
+              --reporters=default --reporters=jest-junit \
+              --testResultsProcessor=jest-junit
+          environment:
+            JEST_JUNIT_OUTPUT_DIR: ./junit
+            JEST_JUNIT_OUTPUT_NAME: jest.xml
+      - store_test_results:
+          path: ./junit
+      - store_artifacts:
+          path: ./coverage
+      - codecov/upload:
+          flags: large
+          file: ./coverage/lcov.info
+
+  test-e2e:
+    docker:
+      - image: circleci/node:14.15.3
+    steps:
+      - checkout
+      - install-packages
+      - run:
+          command: |
+            yarn run test:e2e --ci --forceExit
+workflows:
+  version: 2
+  develop:
+    jobs:
+      - lint-eslint
+      - lint-prettier
+      - docker/hadolint:
+          dockerfiles: Dockerfile
+      - ts-check
+      - test-small:
+          requires:
+            - ts-check
+      - test-medium:
+          requires:
+            - ts-check
+      - test-large:
+          requires:
+            - ts-check
+      - test-e2e:
+          requires:
+            - ts-check
+      - build:
+          requires:
+            - lint-eslint
+            - lint-prettier
+            - ts-check
+            - test-small
+            - test-medium
+            - test-large
+            - test-e2e
+      - docker/publish:
+          context:
+            - ghcr
+          requires:
+            - docker/hadolint
+            - build
+          filters:
+            branches:
+              only: develop
+          image: $CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
+          registry: ghcr.io
+          tag: develop
