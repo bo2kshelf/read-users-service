@@ -8,8 +8,9 @@ generator client {
 }
 
 model User {
-  id          String  @id @default(uuid())
-  uniqueName  String  @unique
+  id          String @id
+  uniqueName  String @unique
   displayName String
-  picture     String
+
+  initialized Boolean @default(false)
 }
