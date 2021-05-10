@@ -22,22 +22,19 @@ export class UsersResolver {
   ) {}
 
   @ResolveReference()
-  resolveReference(reference: {__typename: string; id: string}) {
-    return this.usersService.findUser({id: reference.id});
-  }
-
-  @ResolveField(() => String)
-  picture(@Parent() {picture}: UserEntity) {
-    return new URL(`/${picture}`, this.config.imageproxyBaseUrl).toString();
+  resolveReference({id}: {id: string}): Promise<UserEntity> {
+    return this.usersService.ensureUser({id});
   }
 
   @Query(() => UserEntity, {name: 'user'})
-  async findUser(@Args() args: FindUserArgs) {
-    return this.usersService.findUser(args);
+  async findUser(@Args() {uniqueName}: FindUserArgs): Promise<UserEntity> {
+    const user = await this.usersService.findUser(uniqueName);
+    if (!user) throw new NotFoundException();
+    return user;
   }
 
   @Query(() => [UserEntity])
-  async allUsers() {
+  async allUsers(): Promise<UserEntity[]> {
     return this.usersService.allUsers();
   }
 }
