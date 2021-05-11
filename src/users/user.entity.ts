@@ -11,4 +11,7 @@ export class UserEntity {
 
   @Field(() => String)
   displayName!: string;
+
+  @Field(() => Boolean)
+  initialized!: boolean;
 }
